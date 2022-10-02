@@ -9,6 +9,7 @@ variable env_prefix {}
 variable "my_ip" {}
 variable instance_type {}
 variable public_key_location {}
+variable private_key_location {}
 
 resource "aws_vpc" "myapp-vpc" {
     cidr_block = var.vpc_cidr_block
@@ -153,7 +154,42 @@ resource "aws_instance" "myapp-server" {
     key_name = aws_key_pair.ssh-key.key_name 
     associate_public_ip_address = true
 
-    user_data = file("entry_script.sh")
+    /* user_data = file("entry-script.sh") */
+
+    /* We may use "provisioner "remote-exec" " to run commands in our created instance, instead of using user_data*/
+    /* However we must first use the "provisioner "file" " to copy the bash script from our local machine 
+    to the instance*/
+    /* We may also write inline instead of using a bash script file*/
+    /* However, before terraform can run these commands, or copy the bash files in the instance, 
+    it must first connect into the instance with "connection" */
+
+    connection {
+        type ="ssh"
+        host = self.public_ip
+        user = "ec2-user"
+        private_key = file(var.private_key_location)
+    }
+
+    /* TERRAFFORM ADVISES AGAINTS USING PROVISIONERS, EXCEPT AS A LAST RESORT*/
+    /* Tools like ANSIBLE, PUPPET OR CHEF should be used for configuration management*/
+    /* Terraform does not have any control over commands run with provisioners and can thus give
+    no status feedback on these commands or scripts*/
+
+    provisioner "file" {
+        source = "entry-script.sh"
+        destination = "home/ec2-user/entry-script-on-ec2.sh"
+    }
+
+    provisioner "remote-exec" {
+        script = file("entry-script-on-ec2.sh")
+    }
+
+    /* We can also use provisioner to run commands locally with "provisioner "local-exec" ""*/
+    /* We may output the comman to a file "output.txt" */
+
+    provisioner "local-exec" {
+        command = "echo ${self.public_ip} > output.txt"
+    }
 
     tags = {
         Name: "${var.env_prefix}-server"
